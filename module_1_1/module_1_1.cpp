@@ -45,43 +45,39 @@ ostream& operator<< (ostream &out, const Triplet<double> &o)
 	return out;
 }
 
-ostream& operator<< (ostream &out, const vector<Triplet<double>> &o)
+ostream& operator<< (ostream &out, const concurrent_vector<Triplet<double>> &o)
 {
 	for_each(o.begin(), o.end(),
-		[&out](const Triplet<double> &t) {out << t << "     "; });
+		[&out](const Triplet<double> &t) {out << t << "   "; });
 	return out;
 }
 
 class TripletStore
 {
 
-	typedef concurrent_vector<vector<Triplet<double>>> myVec;
+	typedef concurrent_vector<concurrent_vector<Triplet<double>>> myVec;
 
 
 	friend ostream& operator<< (ostream &out, const TripletStore &o)
 	{
-		auto cur = o.ptr.begin();
-		auto end = o.ptr.end();
-		while (cur != end)
-		{
-			std::for_each(cur, end,
-				[&out](const vector<Triplet<double>> &t) {out << t << "     "; });
-			out << "size of vector: " << (*cur).size() << endl << endl;
-			++cur;
-		}
+	   std::for_each(o.ptr.begin(), o.ptr.end(),
+			[&out](const concurrent_vector<Triplet<double>> &t)
+	       {out << t << "       " << "size of vector: " << t.size() << endl; });
+			//out << "size of vector: " << (*cur).size() << endl << endl;
 		return out;
 	}
 
 public:
 	TripletStore(int n, int length_of_vectors)
 		:length_of_elem(length_of_vectors),
-		length(n)
-		//ptr(length)
+		length(n),
+		ptr(n)
 	{
-		ptr.reserve(length);
-		for (int i = 0; i < length; ++i)
-			ptr[i].reserve(length_of_elem);
-
+		
+		//for (int i = 0; i < length; ++i)
+		//tbb::parallel_for(0, length_of_elem, 1024, [=](int i) {
+		//	ptr[i].reserve(length_of_elem);
+		//});
 	}
 
 
@@ -101,7 +97,7 @@ public:
 
 		unsigned long const block_size = length / num_threads;//количество элементов,кот. будет обрабатывать каждый поток
 
-		vector<thread> threads(num_threads - 1);
+		concurrent_vector<thread> threads(num_threads - 1);
 
 
 		auto block_start = ptr.begin();
@@ -136,20 +132,24 @@ private:
 		auto cur = begin;
 		auto index = dista;
 
+		
 		while (cur != end)
 		{
-			// #pragma omp parallel for
-			for (int j = 0; j<length_of_elem; ++j)
+			//for (int j = 0; j < length_of_elem; ++j)
+		  tbb::parallel_for(0, length_of_elem, 1024, [=](int j)
 			{
 				auto v_ij = dist(gen);                //generate random number
-				if (v_ij < 0.1)
-					cur->push_back(Triplet<double>(index, j, v_ij));//if larger than treshold, insert it
-																	//cur[j] = Eigen::Triplet<double>(index, j, v_ij);
-			}
-			++index;
+				//if (v_ij < 0.1)
+				cur->push_back(Triplet<double>(index, j, v_ij));//if larger than treshold, insert it
+																//cur[j] = Eigen::Triplet<double>(index, j, v_ij);
+		  });
+				
+			//}
 			++cur;
+			++index;
 		}
-	}
+	
+}
 
 
 };
@@ -162,18 +162,19 @@ int main()
 	unsigned int start_time = clock();
 
 
-	int length = 20000;
+	int length = 10000;
+	//cout << sizeof(double);
 	TripletStore store(length, 10000);
 	store.fill_random();
 
 	//std::cout << store;
-
+	
 
 	unsigned int end_time = clock();
 	unsigned int search_time = end_time - start_time;
 	std::cout << "Time: " << (double)search_time / 1000 << std::endl << std::endl;
 
-	unsigned long const min_per_thread = 5;//минимальный размер блока
+	unsigned long const min_per_thread = 100;//минимальный размер блока
 	unsigned long const max_thread = (length + min_per_thread - 1) / min_per_thread;//максимальное число потоков
 
 	unsigned long const hardware_threads = thread::hardware_concurrency();
@@ -214,5 +215,6 @@ int main()
 
 	A.makeCompressed();
 	cout << A;*/
+	system("pause");
 	return 0;
 }
